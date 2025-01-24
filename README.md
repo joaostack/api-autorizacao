@@ -1,2 +1,2 @@
 # api-autorizacao
-Api simples de autorização
+Api simples de autorização com JWT
