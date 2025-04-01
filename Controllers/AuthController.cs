@@ -1,5 +1,6 @@
 using AuthAPI.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -9,7 +10,7 @@ using System.Text;
 namespace AuthAPI.Controllers
 {
     [ApiController]
-    [Route("api/v1/auth")]
+    [Route("/api/v1/auth/")]
     public class AuthController : ControllerBase
     {
         private readonly IConfiguration _configuration;
@@ -30,14 +31,21 @@ namespace AuthAPI.Controllers
         {
             try
             {
-                var user = users.SingleOrDefault(u => u.Username == userLogin.Username && u.Password == userLogin.Password);
+                if (userLogin == null)
+                {
+                    return BadRequest(new { Message = "Login data cannot be null." });
+                }
 
-                if (user == null || userLogin == null)
+                var user = users.FirstOrDefault(u => u.Username == userLogin.Username && u.Password == userLogin.Password);
+
+                if (user == null)
                 {
                     return Unauthorized(new { Message = "Invalid username or password!" });
                 }
 
-                return Ok(new { Message = BuildToken(userLogin) });
+                var userToken = BuildToken(user);
+
+                return Ok(new { Message = "Login successfull!" });
             }
             catch (Exception ex)
             {
@@ -45,14 +53,58 @@ namespace AuthAPI.Controllers
             }
         }
 
+        [HttpPost("register")]
+        public ActionResult<User> Register([FromBody] User userRegister)
+        {
+            try
+            {
+                if (userRegister == null)
+                {
+                    return BadRequest(new { Message = "Register data cannot be null." });
+                }
+
+                users.Add(userRegister);
+
+                return Ok(userRegister);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [HttpGet("users")]
+        public ActionResult<List<User>> Users()
+        {
+            try
+            {
+                if (users == null)
+                {
+                    return NotFound(new { Message = "No users found." });
+                }
+
+                return Ok(users);
+            } catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
         private UserToken BuildToken(User user)
         {
+            var jwtKey = _configuration["JWT:key"];
+            if (jwtKey == null)
+            {
+                Console.WriteLine("Set JWT Key on appsettings.");
+            }
+
+            // JWT Parts
             var claims = new[] {
                 new Claim(JwtRegisteredClaimNames.UniqueName, user.Username),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:key"]));
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var expiration = DateTime.UtcNow.AddHours(1);
             JwtSecurityToken token = new JwtSecurityToken(
